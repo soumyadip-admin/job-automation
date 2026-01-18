@@ -1,5 +1,6 @@
 # Core automation
 playwright>=1.40.0
+playwright-stealth>=1.0.0
 
 # Google APIs
 google-api-python-client>=2.100.0

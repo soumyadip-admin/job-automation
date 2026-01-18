@@ -8,6 +8,8 @@ on:
 jobs:
   run_linkedin:
     runs-on: windows-latest
+    env:
+      PYTHONIOENCODING: utf-8  # Prevent Unicode encoding errors on Windows
     
     steps:
     - name: Checkout repository
@@ -28,10 +30,10 @@ jobs:
       shell: bash
       run: |
         if [ -z "${{ secrets.GOOGLE_SHEETS_CREDENTIALS_JSON }}" ]; then
-          echo "❌ GOOGLE_SHEETS_CREDENTIALS_JSON is MISSING"
+          echo "[ERROR] GOOGLE_SHEETS_CREDENTIALS_JSON is MISSING"
           exit 1
         else
-          echo "✅ GOOGLE_SHEETS_CREDENTIALS_JSON is SET"
+          echo "[OK] GOOGLE_SHEETS_CREDENTIALS_JSON is SET"
         fi
       
     - name: Run LinkedIn automation
@@ -52,6 +54,8 @@ jobs:
     runs-on: windows-latest
     needs: run_linkedin  # Run after LinkedIn to avoid conflicts
     if: always()         # Run even if LinkedIn fails
+    env:
+      PYTHONIOENCODING: utf-8  # Prevent Unicode encoding errors on Windows
     
     steps:
     - name: Checkout repository

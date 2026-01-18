@@ -12,9 +12,10 @@ from dotenv import load_dotenv
 try:
     from playwright_stealth import stealth_sync
     STEALTH_AVAILABLE = True
-except ImportError:
+except Exception:
+    # Avoid non-ASCII characters so Windows runners do not raise UnicodeEncodeError
     STEALTH_AVAILABLE = False
-    print("⚠️ playwright-stealth not installed. Run: pip install playwright-stealth")
+    print("WARNING: playwright-stealth not installed. Install with: pip install playwright-stealth")
 
 load_dotenv()
 
@@ -69,7 +70,7 @@ class JobScraper:
         try:
             from playwright.sync_api import sync_playwright
             
-            print("   🌐 Starting browser with stealth mode...")
+            print("   [BROWSER] Starting browser with stealth mode...")
             self.playwright = sync_playwright().start()
             
             # Launch browser with stealth args
@@ -114,7 +115,7 @@ class JobScraper:
             # Apply stealth mode if available
             if STEALTH_AVAILABLE:
                 stealth_sync(self.page)
-                print("   🥷 Stealth mode activated")
+                print("   [STEALTH] Stealth mode activated")
             
             # Additional anti-detection scripts
             self.page.add_init_script("""
@@ -147,11 +148,11 @@ class JobScraper:
                 );
             """)
             
-            print("✅ Browser started with anti-detection")
+            print("[OK] Browser started with anti-detection")
             return True
             
         except Exception as e:
-            print(f"❌ Browser start failed: {e}")
+            print(f"[ERROR] Browser start failed: {e}")
             return False
     
     def close(self):
@@ -163,7 +164,7 @@ class JobScraper:
                 self.browser.close()
             if self.playwright:
                 self.playwright.stop()
-            print("🌐 Browser closed")
+            print("[BROWSER] Browser closed")
         except:
             pass
     
@@ -176,29 +177,29 @@ class JobScraper:
         password = os.getenv('NAUKRI_PASSWORD')
         
         if not username or not password:
-            print("⚠️ Naukri credentials not found - will search without login")
+            print("WARNING: Naukri credentials not found - will search without login")
             return True  # Proceed without login
         
         try:
-            print("🔐 Attempting Naukri login...")
+            print("[LOGIN] Attempting Naukri login...")
             
             # Visit homepage first (more natural)
-            print("   🏠 Loading homepage...")
+            print("   [HOME] Loading homepage...")
             try:
                 self.page.goto('https://www.naukri.com/', timeout=60000, wait_until='networkidle')
                 self._delay(3, 5)
             except:
-                print("   ⚠️ Homepage access blocked - trying direct search...")
+                print("   WARNING: Homepage access blocked - trying direct search...")
                 return True  # Proceed to search anyway
             
             # Check if we're blocked
             page_content = self.page.content().lower()
             if 'access denied' in page_content or 'reference #' in page_content:
-                print("   ⚠️ Access blocked by firewall - will search without login")
+                print("   WARNING: Access blocked by firewall - will search without login")
                 return True
             
             # Try to find login link
-            print("   🔗 Looking for login option...")
+            print("   [LINK] Looking for login option...")
             try:
                 login_link = self.page.query_selector('a[href*="nlogin"], a:has-text("Login"), .login')
                 if login_link and login_link.is_visible():
@@ -209,22 +210,22 @@ class JobScraper:
                     self.page.goto('https://www.naukri.com/nlogin/login', timeout=60000)
                     self._delay(3, 5)
             except:
-                print("   ⚠️ Could not access login page - proceeding without login")
+                print("   WARNING: Could not access login page - proceeding without login")
                 return True
             
             # Check if login page loaded
             page_content = self.page.content().lower()
             if 'access denied' in page_content:
-                print("   ⚠️ Login page blocked - will search without login")
+                print("   WARNING: Login page blocked - will search without login")
                 return True
             
             # Find email field
-            print("   📧 Entering credentials...")
+            print("   [EMAIL] Entering credentials...")
             email_field = self.page.query_selector('input[type="text"], input[type="email"]')
             password_field = self.page.query_selector('input[type="password"]')
             
             if not email_field or not password_field:
-                print("   ⚠️ Login form not found - proceeding without login")
+                print("   WARNING: Login form not found - proceeding without login")
                 return True
             
             # Type slowly (human-like)
@@ -244,16 +245,16 @@ class JobScraper:
                 
                 # Check if login succeeded
                 if 'login' not in self.page.url.lower():
-                    print("✅ Login successful!")
+                    print("[OK] Login successful!")
                     self.logged_in = True
                     return True
             
-            print("   ⚠️ Login uncertain - proceeding to search")
+            print("   WARNING: Login uncertain - proceeding to search")
             return True
                 
         except Exception as e:
-            print(f"   ⚠️ Login error: {e}")
-            print("   → Proceeding without login")
+            print(f"   WARNING: Login error: {e}")
+            print("   -> Proceeding without login")
             return True  # Always proceed, even if login fails
     
     def search_jobs(self, keyword="Data Analyst", max_jobs=10):
@@ -273,31 +274,31 @@ class JobScraper:
             # URL with filters: 0-2 years experience, last 7 days, specific locations
             url = f"https://www.naukri.com/{search_term}-jobs?experience=0-2&jobAge=7&location={locations}"
             
-            print(f"\n🔍 Searching: {keyword}")
-            print(f"   📅 Last 7 days only")
-            print(f"   📍 Preferred locations")
-            print(f"   💼 0-2 years experience")
+            print(f"\n[SEARCH] Searching: {keyword}")
+            print(f"   [DATE] Last 7 days only")
+            print(f"   [LOCATION] Preferred locations")
+            print(f"   [EXP] 0-2 years experience")
             
             # Navigate to search results
             try:
                 self.page.goto(url, timeout=60000, wait_until='domcontentloaded')
                 self._delay(3, 5)
             except Exception as e:
-                print(f"   ❌ Navigation failed: {e}")
+                print(f"   [ERROR] Navigation failed: {e}")
                 return jobs
             
             # Check if we're blocked
             page_content = self.page.content().lower()
             if 'access denied' in page_content or 'reference #' in page_content:
-                print("   ❌ Search page blocked by firewall")
-                print("   💡 Suggestion: Set up Naukri email alerts instead")
+                print("   [ERROR] Search page blocked by firewall")
+                print("   [TIP] Suggestion: Set up Naukri email alerts instead")
                 return jobs
             
             # Wait for job cards
             try:
                 self.page.wait_for_selector('.srp-jobtuple-wrapper, .jobTuple, article', timeout=15000)
             except:
-                print("   ❌ No job listings found")
+                print("   [ERROR] No job listings found")
                 return jobs
             
             # Get all job cards (try multiple selectors)
@@ -307,15 +308,15 @@ class JobScraper:
             if not cards:
                 cards = self.page.query_selector_all('article')
             
-            print(f"   📋 Found {len(cards)} job listings")
+            print(f"   [JOBS] Found {len(cards)} job listings")
             
             if len(cards) == 0:
-                print("   ⚠️ No job cards detected - page structure may have changed")
+                print("   WARNING: No job cards detected - page structure may have changed")
                 # Save page for debugging
                 try:
                     with open('logs/search_page.html', 'w', encoding='utf-8') as f:
                         f.write(self.page.content())
-                    print("   📄 Page saved to logs/search_page.html for debugging")
+                    print("   [FILE] Page saved to logs/search_page.html for debugging")
                 except:
                     pass
                 return jobs
@@ -342,20 +343,20 @@ class JobScraper:
                             # Show progress
                             title_short = job['title'][:40]
                             loc_short = job['location'][:20] if job.get('location') else 'N/A'
-                            print(f"   ✓ [{parsed_count}] {title_short}... | {loc_short}")
+                            print(f"   [OK] [{parsed_count}] {title_short}... | {loc_short}")
                         else:
                             skipped_location += 1
                 except Exception as e:
                     continue
             
             if skipped_location > 0:
-                print(f"   ⏭️ Skipped {skipped_location} jobs (location filter)")
+                print(f"   [SKIP] Skipped {skipped_location} jobs (location filter)")
             
-            print(f"   ✅ Parsed {len(jobs)} matching jobs")
+            print(f"   [OK] Parsed {len(jobs)} matching jobs")
             return jobs
             
         except Exception as e:
-            print(f"❌ Search error: {e}")
+            print(f"[ERROR] Search error: {e}")
             return jobs
     
     def _parse_job_card(self, card):
@@ -439,14 +440,14 @@ class JobScraper:
     def update_profile(self):
         """Update Naukri profile to stay active."""
         if not self.logged_in:
-            print("   ⚠️ Not logged in - skipping profile update")
+            print("   WARNING: Not logged in - skipping profile update")
             return False
         
         try:
-            print("📝 Updating profile...")
+            print("[PROFILE] Updating profile...")
             self.page.goto('https://www.naukri.com/mnjuser/profile', timeout=60000)
             self._delay(2, 4)
-            print("   ✅ Profile accessed")
+            print("   [OK] Profile accessed")
             return True
         except:
             return False
@@ -455,11 +456,11 @@ class JobScraper:
 # Test the scraper
 if __name__ == "__main__":
     print("=" * 60)
-    print("🧪 TESTING JOB SCRAPER")
+    print("[TEST] TESTING JOB SCRAPER")
     print("=" * 60)
-    print("\n📍 Locations: Bangalore, Kolkata, Hyderabad, Chennai, etc.")
-    print("📅 Date: Last 7 days")
-    print("💼 Experience: 0-2 years\n")
+    print("\n[LOCATION] Locations: Bangalore, Kolkata, Hyderabad, Chennai, etc.")
+    print("[DATE] Date: Last 7 days")
+    print("[EXP] Experience: 0-2 years\n")
     
     scraper = JobScraper(headless=False)  # Visible browser for testing
     
@@ -473,26 +474,26 @@ if __name__ == "__main__":
             
             # Display results
             print(f"\n{'=' * 60}")
-            print(f"📊 RESULTS: Found {len(jobs)} matching jobs")
+            print(f"[RESULTS] RESULTS: Found {len(jobs)} matching jobs")
             print(f"{'=' * 60}\n")
             
             for i, job in enumerate(jobs, 1):
                 print(f"{'─' * 50}")
                 print(f"Job #{i}")
-                print(f"📋 Title:    {job.get('title', 'N/A')}")
-                print(f"🏢 Company:  {job.get('company', 'N/A')}")
-                print(f"📍 Location: {job.get('location', 'N/A')}")
-                print(f"💼 Exp:      {job.get('experience', 'N/A')}")
-                print(f"💰 Salary:   {job.get('salary', 'N/A')}")
+                print(f"[TITLE]    {job.get('title', 'N/A')}")
+                print(f"[COMPANY]  {job.get('company', 'N/A')}")
+                print(f"[LOCATION] {job.get('location', 'N/A')}")
+                print(f"[EXP]      {job.get('experience', 'N/A')}")
+                print(f"[SALARY]   {job.get('salary', 'N/A')}")
                 if job.get('posted_date'):
-                    print(f"📅 Posted:   {job['posted_date']}")
+                    print(f"[POSTED]   {job['posted_date']}")
                 if job.get('url'):
-                    print(f"🔗 URL:      {job['url'][:60]}...")
+                    print(f"[URL]      {job['url'][:60]}...")
     
     except KeyboardInterrupt:
-        print("\n\n⚠️ Interrupted by user")
+        print("\n\nWARNING: Interrupted by user")
     except Exception as e:
-        print(f"\n❌ Error: {e}")
+        print(f"\n[ERROR] Error: {e}")
     finally:
         input("\n\nPress Enter to close browser...")
         scraper.close()
