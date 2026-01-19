@@ -29,7 +29,7 @@ class SheetsManager:
                 'https://www.googleapis.com/auth/drive'
             ]
             
-            # Check for JSON string (GitHub Actions - Priority 1)
+            # STEP 1: Try JSON Secret (GitHub Actions - Priority 1)
             creds_json = os.getenv('GOOGLE_SHEETS_CREDENTIALS_JSON')
             
             if creds_json:
@@ -44,7 +44,7 @@ class SheetsManager:
                 except Exception as e:
                     print(f"⚠️ JSON secret failed, trying file path: {e}")
             
-            # Check for file path (Local Development - Priority 2)
+            # STEP 2: Try File Path (Local Development - Priority 2)
             creds_path = os.getenv('GOOGLE_SHEETS_CREDENTIALS_PATH', 'config/credentials.json')
             if os.path.exists(creds_path):
                 credentials = Credentials.from_service_account_file(creds_path, scopes=SCOPES)
@@ -54,7 +54,7 @@ class SheetsManager:
                 print("✅ Connected to Google Sheets (via File)")
                 return True
             
-            # No credentials found
+            # STEP 3: No credentials found
             print("⚠️ No Google credentials found. Sheets logging disabled.")
             return False
             
@@ -123,7 +123,6 @@ class SheetsManager:
                 platform
             ]
             sheet.append_row(row)
-            print(f"📝 Logged error: {error_type}")
         except Exception as e:
             print(f"Failed to log error: {e}")
 
