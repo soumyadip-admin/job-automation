@@ -8,8 +8,6 @@ on:
 jobs:
   run_linkedin:
     runs-on: windows-latest
-    env:
-      PYTHONIOENCODING: utf-8
     
     steps:
     - name: Checkout repository
@@ -26,22 +24,10 @@ jobs:
         pip install -r requirements.txt
         playwright install chromium
       
-    - name: DEBUG SECRETS
-      shell: bash
-      env:
-        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        GOOGLE_SHEETS_CREDENTIALS_JSON: ${{ secrets.GOOGLE_SHEETS_CREDENTIALS_JSON }}
-      run: |
-        echo "=== DEBUGGING SECRETS ==="
-        if [ -n "$TELEGRAM_BOT_TOKEN" ]; then echo "✅ TELEGRAM_BOT_TOKEN is set"; else echo "❌ TELEGRAM_BOT_TOKEN is MISSING"; fi
-        if [ -n "$TELEGRAM_CHAT_ID" ]; then echo "✅ TELEGRAM_CHAT_ID is set"; else echo "❌ TELEGRAM_CHAT_ID is MISSING"; fi
-        if [ -n "$GOOGLE_SHEETS_CREDENTIALS_JSON" ]; then echo "✅ GOOGLE_SHEETS_CREDENTIALS_JSON is set"; else echo "❌ GOOGLE_SHEETS_CREDENTIALS_JSON is MISSING"; fi
-        echo "========================="
-      
     - name: Run LinkedIn automation
       run: python main.py --linkedin --max-jobs 15 --auto-apply
       env:
+        # Pass secrets explicitly to this step
         NAUKRI_USERNAME: ${{ secrets.NAUKRI_USERNAME }}
         NAUKRI_PASSWORD: ${{ secrets.NAUKRI_PASSWORD }}
         LINKEDIN_USERNAME: ${{ secrets.LINKEDIN_USERNAME }}
@@ -52,13 +38,12 @@ jobs:
         GOOGLE_SHEETS_SPREADSHEET_ID: ${{ secrets.GOOGLE_SHEETS_SPREADSHEET_ID }}
         GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
         GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+        PYTHONIOENCODING: utf-8
 
   run_email_parser:
     runs-on: windows-latest
     needs: run_linkedin
     if: always()
-    env:
-      PYTHONIOENCODING: utf-8
     
     steps:
     - name: Checkout repository
@@ -77,9 +62,11 @@ jobs:
     - name: Run Email Parser
       run: python main.py --email
       env:
+        # Pass secrets explicitly to this step
         GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
         GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         GOOGLE_SHEETS_CREDENTIALS_JSON: ${{ secrets.GOOGLE_SHEETS_CREDENTIALS_JSON }}
         GOOGLE_SHEETS_SPREADSHEET_ID: ${{ secrets.GOOGLE_SHEETS_SPREADSHEET_ID }}
+        PYTHONIOENCODING: utf-8
