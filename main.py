@@ -25,7 +25,7 @@ try:
     from modules.cover_letter_generator import CoverLetterGenerator
     from modules.job_scraper import JobScraper
     from modules.linkedin_scraper import LinkedInScraper
-    from modules.email_parser import EmailParser # Import Email Parser
+    from modules.email_parser import EmailParser
     print("✅ All modules imported successfully")
 except ImportError as e:
     print(f"❌ Import error: {e}")
@@ -138,7 +138,7 @@ class JobAutomation:
         self.notifier.notify_startup()
         
         try:
-            self.linkedin_scraper = LinkedInScraper(headless=True)
+            self.linkedin_scraper = LinkedInScraper(headless=True)  # Run headless in production
             if not self.linkedin_scraper.start_browser():
                 raise Exception("LinkedIn Browser failed to start")
             
@@ -247,9 +247,14 @@ class JobAutomation:
             
             # Apply/Notify
             if auto_apply and job.get('platform') == 'LinkedIn':
-                if self.linkedin_scraper and self.linkedin_scraper.auto_apply_to_job(job):
-                    self.notifier.notify_application(job)
-                    self.stats['applied'] += 1
+                if self.linkedin_scraper and hasattr(self.linkedin_scraper, 'auto_apply_to_job'):
+                    if self.linkedin_scraper.auto_apply_to_job(job):
+                        self.notifier.notify_application(job)
+                        self.stats['applied'] += 1
+                    else:
+                        # Failed auto-apply, still log and notify
+                        self.notifier.notify_application(job)
+                        self.stats['applied'] += 1
                 else:
                     self.notifier.notify_application(job)
                     self.stats['applied'] += 1
@@ -260,7 +265,7 @@ class JobAutomation:
             if score >= 85:
                 self.notifier.notify_high_match(job)
         
-        # Handle review (60-69%)
+        # Handle review (60-69%) - Log but don't auto-apply
         elif recommendation == 'review':
             print(f"📝 Queued for manual review")
             if skills:

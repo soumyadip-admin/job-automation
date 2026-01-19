@@ -2,40 +2,34 @@ name: Job Application Automation - Daily Run
 
 on:
   schedule:
+    # Runs at 9 AM, 1 PM, 5 PM IST (UTC+5:30 = UTC-0.5)
+    # 03:30 UTC = 9 AM IST
+    # 07:30 UTC = 1 PM IST
+    # 11:30 UTC = 5 PM IST
     - cron: '30 3,7,11 * * *'
-  workflow_dispatch:
+  workflow_dispatch:  # Allow manual run
 
 jobs:
   run_linkedin:
     runs-on: windows-latest
     env:
-      PYTHONIOENCODING: utf-8  # Prevent Unicode encoding errors on Windows
-    
+      PYTHONIOENCODING: utf-8  # Force UTF-8 to handle emojis on Windows
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
-      
+
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.11'
-      
+
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         playwright install chromium
-      
-    - name: Verify Secrets (Debug)
-      shell: bash
-      run: |
-        if [ -z "${{ secrets.GOOGLE_SHEETS_CREDENTIALS_JSON }}" ]; then
-          echo "[ERROR] GOOGLE_SHEETS_CREDENTIALS_JSON is MISSING"
-          exit 1
-        else
-          echo "[OK] GOOGLE_SHEETS_CREDENTIALS_JSON is SET"
-        fi
-      
+
     - name: Run LinkedIn automation
       run: python main.py --linkedin --max-jobs 15 --auto-apply
       env:
@@ -45,6 +39,7 @@ jobs:
         LINKEDIN_PASSWORD: ${{ secrets.LINKEDIN_PASSWORD }}
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        # JSON Secret is CRITICAL for Google Sheets on GitHub
         GOOGLE_SHEETS_CREDENTIALS_JSON: ${{ secrets.GOOGLE_SHEETS_CREDENTIALS_JSON }}
         GOOGLE_SHEETS_SPREADSHEET_ID: ${{ secrets.GOOGLE_SHEETS_SPREADSHEET_ID }}
         GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
@@ -52,26 +47,25 @@ jobs:
 
   run_email_parser:
     runs-on: windows-latest
-    needs: run_linkedin  # Run after LinkedIn to avoid conflicts
+    needs: run_linkedin  # Run after LinkedIn
     if: always()         # Run even if LinkedIn fails
     env:
-      PYTHONIOENCODING: utf-8  # Prevent Unicode encoding errors on Windows
-    
+      PYTHONIOENCODING: utf-8
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
-      
+
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.11'
-      
+
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
-        playwright install chromium  # Required because main.py imports job_scraper
-      
+
     - name: Run Email Parser
       run: python main.py --email
       env:
@@ -79,5 +73,6 @@ jobs:
         GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        # JSON Secret is CRITICAL for Google Sheets on GitHub
         GOOGLE_SHEETS_CREDENTIALS_JSON: ${{ secrets.GOOGLE_SHEETS_CREDENTIALS_JSON }}
         GOOGLE_SHEETS_SPREADSHEET_ID: ${{ secrets.GOOGLE_SHEETS_SPREADSHEET_ID }}
