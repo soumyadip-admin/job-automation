@@ -17,7 +17,9 @@ class Notifier:
         self.enabled = bool(self.bot_token and self.chat_id)
         
         if not self.enabled:
-            print("⚠️ Telegram not configured. Notifications disabled.")
+            print("⚠️ [NOTIFIER] Telegram not configured. Check secrets.")
+            print(f"   Token present: {bool(self.bot_token)}")
+            print(f"   Chat ID present: {bool(self.chat_id)}")
     
     def send(self, message):
         """Send a Telegram message."""
@@ -34,15 +36,24 @@ class Notifier:
                 "disable_web_page_preview": True
             }
             response = requests.post(url, json=payload, timeout=10)
-            return response.ok
+            
+            if response.status_code != 200:
+                print(f"❌ [TELEGRAM ERROR] Status: {response.status_code}, Response: {response.text}")
+                return False
+                
+            return True
         except Exception as e:
-            print(f"❌ Telegram error: {e}")
+            print(f"❌ [TELEGRAM EXCEPTION] {e}")
             return False
     
     def notify_startup(self):
         """Notify that automation started."""
+        print("📤 Sending startup notification...")
         msg = f"🚀 <b>Job Automation Started</b>\n\n🕐 {datetime.now().strftime('%d %b %Y, %I:%M %p')}"
-        self.send(msg)
+        if self.send(msg):
+            print("✅ Startup notification sent!")
+        else:
+            print("❌ Failed to send startup notification.")
     
     def notify_application(self, job_data):
         """Notify about successful application."""
@@ -71,6 +82,7 @@ class Notifier:
     
     def notify_error(self, error_message):
         """Notify about an error."""
+        print(f"📤 Sending error notification: {error_message[:50]}...")
         msg = f"""❌ <b>Error Occurred</b>
 
 {error_message[:200]}

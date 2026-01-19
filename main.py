@@ -41,6 +41,11 @@ class JobAutomation:
         print("🚀 JOB APPLICATION AUTOMATION SYSTEM")
         print("="*50 + "\n")
         
+        # Debugging secrets (safe check)
+        print(f"[DEBUG] Telegram Token Set: {bool(os.getenv('TELEGRAM_BOT_TOKEN'))}")
+        print(f"[DEBUG] Telegram Chat ID Set: {bool(os.getenv('TELEGRAM_CHAT_ID'))}")
+        print(f"[DEBUG] Sheets JSON Set: {bool(os.getenv('GOOGLE_SHEETS_CREDENTIALS_JSON'))}")
+        
         self.sheets = SheetsManager()
         self.notifier = Notifier()
         self.matcher = JobMatcher()
@@ -56,6 +61,17 @@ class JobAutomation:
             'email_jobs_parsed': 0
         }
     
+    def notify_github_summary(self):
+        """Send notification that GitHub Actions run is complete."""
+        print("\n" + "="*50)
+        print("📊 SENDING GITHUB SUMMARY")
+        print("="*50 + "\n")
+        # Ensure notifier is enabled
+        if self.notifier.enabled:
+            self.notifier.notify_summary(self.stats)
+        else:
+            print("⚠️ Telegram disabled - skipping summary")
+
     def run_test(self):
         """Run with sample data."""
         print("🧪 RUNNING IN TEST MODE\n")
@@ -128,7 +144,7 @@ class JobAutomation:
             if self.scraper:
                 self.scraper.close()
             self._print_summary()
-            self.notifier.notify_summary(self.stats)
+            self.notify_github_summary()
 
     def run_linkedin(self, max_jobs=10, auto_apply=False):
         """Run LinkedIn automation."""
@@ -162,7 +178,7 @@ class JobAutomation:
             if self.linkedin_scraper:
                 self.linkedin_scraper.close()
             self._print_summary()
-            self.notifier.notify_summary(self.stats)
+            self.notify_github_summary()
 
     def run_email_parser(self):
         """Parse Naukri job alert emails."""
@@ -195,7 +211,7 @@ class JobAutomation:
         
         finally:
             self._print_summary()
-            self.notifier.notify_summary(self.stats)
+            self.notify_github_summary()
     
     def _process_job(self, job, auto_apply=False):
         """Process a single job posting."""
@@ -248,11 +264,10 @@ class JobAutomation:
             # Apply/Notify
             if auto_apply and job.get('platform') == 'LinkedIn':
                 if self.linkedin_scraper and hasattr(self.linkedin_scraper, 'auto_apply_to_job'):
-                    if self.linkedin_scraper.auto_apply_to_job(job):
+                    if self.linkedin_scraper.auto_apply_to_job(job.get('url', '')):
                         self.notifier.notify_application(job)
                         self.stats['applied'] += 1
                     else:
-                        # Failed auto-apply, still log and notify
                         self.notifier.notify_application(job)
                         self.stats['applied'] += 1
                 else:
@@ -274,6 +289,7 @@ class JobAutomation:
             self.sheets.log_application(job)
             self.stats['skipped'] += 1
         
+        # Handle skip
         else:
             print("⏭️ Score too low - Skipping")
             self.stats['skipped'] += 1
