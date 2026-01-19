@@ -261,16 +261,19 @@ class JobAutomation:
             # Log to Sheet
             self.sheets.log_application(job)
             
-            # Apply/Notify
+            # Apply/Notify logic with SAFETY CHECK
             if auto_apply and job.get('platform') == 'LinkedIn':
+                # Check if scraper object exists and has the method
                 if self.linkedin_scraper and hasattr(self.linkedin_scraper, 'auto_apply_to_job'):
                     if self.linkedin_scraper.auto_apply_to_job(job.get('url', '')):
                         self.notifier.notify_application(job)
                         self.stats['applied'] += 1
                     else:
+                        # Failed auto-apply, still notify
                         self.notifier.notify_application(job)
                         self.stats['applied'] += 1
                 else:
+                    # Method missing, just notify
                     self.notifier.notify_application(job)
                     self.stats['applied'] += 1
             else:
