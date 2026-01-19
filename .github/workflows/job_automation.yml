@@ -2,34 +2,43 @@ name: Job Application Automation - Daily Run
 
 on:
   schedule:
-    # Runs at 9 AM, 1 PM, 5 PM IST (UTC+5:30 = UTC-0.5)
-    # 03:30 UTC = 9 AM IST
-    # 07:30 UTC = 1 PM IST
-    # 11:30 UTC = 5 PM IST
     - cron: '30 3,7,11 * * *'
-  workflow_dispatch:  # Allow manual run
+  workflow_dispatch:
 
 jobs:
   run_linkedin:
     runs-on: windows-latest
     env:
-      PYTHONIOENCODING: utf-8  # Force UTF-8 to handle emojis on Windows
-
+      PYTHONIOENCODING: utf-8
+    
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
-
+      
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.11'
-
+      
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         playwright install chromium
-
+      
+    - name: DEBUG SECRETS
+      shell: bash
+      env:
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        GOOGLE_SHEETS_CREDENTIALS_JSON: ${{ secrets.GOOGLE_SHEETS_CREDENTIALS_JSON }}
+      run: |
+        echo "=== DEBUGGING SECRETS ==="
+        if [ -n "$TELEGRAM_BOT_TOKEN" ]; then echo "✅ TELEGRAM_BOT_TOKEN is set"; else echo "❌ TELEGRAM_BOT_TOKEN is MISSING"; fi
+        if [ -n "$TELEGRAM_CHAT_ID" ]; then echo "✅ TELEGRAM_CHAT_ID is set"; else echo "❌ TELEGRAM_CHAT_ID is MISSING"; fi
+        if [ -n "$GOOGLE_SHEETS_CREDENTIALS_JSON" ]; then echo "✅ GOOGLE_SHEETS_CREDENTIALS_JSON is set"; else echo "❌ GOOGLE_SHEETS_CREDENTIALS_JSON is MISSING"; fi
+        echo "========================="
+      
     - name: Run LinkedIn automation
       run: python main.py --linkedin --max-jobs 15 --auto-apply
       env:
@@ -39,7 +48,6 @@ jobs:
         LINKEDIN_PASSWORD: ${{ secrets.LINKEDIN_PASSWORD }}
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        # JSON Secret is CRITICAL for Google Sheets on GitHub
         GOOGLE_SHEETS_CREDENTIALS_JSON: ${{ secrets.GOOGLE_SHEETS_CREDENTIALS_JSON }}
         GOOGLE_SHEETS_SPREADSHEET_ID: ${{ secrets.GOOGLE_SHEETS_SPREADSHEET_ID }}
         GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
@@ -47,25 +55,25 @@ jobs:
 
   run_email_parser:
     runs-on: windows-latest
-    needs: run_linkedin  # Run after LinkedIn
-    if: always()         # Run even if LinkedIn fails
+    needs: run_linkedin
+    if: always()
     env:
       PYTHONIOENCODING: utf-8
-
+    
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
-
+      
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.11'
-
+      
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
-
+      
     - name: Run Email Parser
       run: python main.py --email
       env:
@@ -73,6 +81,5 @@ jobs:
         GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        # JSON Secret is CRITICAL for Google Sheets on GitHub
         GOOGLE_SHEETS_CREDENTIALS_JSON: ${{ secrets.GOOGLE_SHEETS_CREDENTIALS_JSON }}
         GOOGLE_SHEETS_SPREADSHEET_ID: ${{ secrets.GOOGLE_SHEETS_SPREADSHEET_ID }}
