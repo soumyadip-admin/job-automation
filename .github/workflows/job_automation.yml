@@ -1,72 +1,68 @@
-name: Job Application Automation - Daily Run
+name: SAM Career Job Discovery
 
 on:
   schedule:
-    - cron: '30 3,7,11 * * *'
+    # Every hour. Sam's API still enforces the 24 h default and 72 h alternate views.
+    - cron: '17 * * * *'
   workflow_dispatch:
 
-jobs:
-  run_linkedin:
-    runs-on: windows-latest
-    
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
-      
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
-      
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        playwright install chromium
-      
-    - name: Run LinkedIn automation
-      run: python main.py --linkedin --max-jobs 15 --auto-apply
-      env:
-        # Pass secrets explicitly to this step
-        NAUKRI_USERNAME: ${{ secrets.NAUKRI_USERNAME }}
-        NAUKRI_PASSWORD: ${{ secrets.NAUKRI_PASSWORD }}
-        LINKEDIN_USERNAME: ${{ secrets.LINKEDIN_USERNAME }}
-        LINKEDIN_PASSWORD: ${{ secrets.LINKEDIN_PASSWORD }}
-        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        GOOGLE_SHEETS_CREDENTIALS_JSON: ${{ secrets.GOOGLE_SHEETS_CREDENTIALS_JSON }}
-        GOOGLE_SHEETS_SPREADSHEET_ID: ${{ secrets.GOOGLE_SHEETS_SPREADSHEET_ID }}
-        GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
-        GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
-        PYTHONIOENCODING: utf-8
+permissions:
+  contents: read
 
-  run_email_parser:
-    runs-on: windows-latest
-    needs: run_linkedin
-    if: always()
-    
+concurrency:
+  group: sam-career-job-discovery
+  cancel-in-progress: false
+
+jobs:
+  discover_jobs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GOOGLE_SHEETS_CREDENTIALS_JSON: ${{ secrets.GOOGLE_SHEETS_CREDENTIALS_JSON }}
+      GOOGLE_SHEETS_SPREADSHEET_ID: ${{ secrets.GOOGLE_SHEETS_SPREADSHEET_ID }}
+      GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+      GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      TELEGRAM_BOT_USERNAME: SoumyadipSAMCareerBot
+      EXPECTED_SPREADSHEET_TITLE: Job Application Tracker
+      EXPECTED_SHEET_TAB: Job_Applications
+      PYTHONIOENCODING: utf-8
+
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
-      
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
-      
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-      
-    - name: Run Email Parser
-      run: python main.py --email
-      env:
-        # Pass secrets explicitly to this step
-        GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
-        GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
-        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        GOOGLE_SHEETS_CREDENTIALS_JSON: ${{ secrets.GOOGLE_SHEETS_CREDENTIALS_JSON }}
-        GOOGLE_SHEETS_SPREADSHEET_ID: ${{ secrets.GOOGLE_SHEETS_SPREADSHEET_ID }}
-        PYTHONIOENCODING: utf-8
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run safety tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Validate required configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GOOGLE_SHEETS_SPREADSHEET_ID" || { echo "::error::Missing GOOGLE_SHEETS_SPREADSHEET_ID"; exit 1; }
+          test -n "$GOOGLE_SHEETS_CREDENTIALS_JSON" || { echo "::error::Missing GOOGLE_SHEETS_CREDENTIALS_JSON"; exit 1; }
+          test -n "$GMAIL_ADDRESS" || { echo "::error::Missing GMAIL_ADDRESS"; exit 1; }
+          test -n "$GMAIL_APP_PASSWORD" || { echo "::error::Missing GMAIL_APP_PASSWORD"; exit 1; }
+          test -n "$TELEGRAM_BOT_TOKEN" || { echo "::error::Missing TELEGRAM_BOT_TOKEN"; exit 1; }
+          test -n "$TELEGRAM_CHAT_ID" || { echo "::error::Missing TELEGRAM_CHAT_ID"; exit 1; }
+
+      - name: Verify Google Sheets connection, identity and reversible write
+        run: python scripts/sheets_diagnostic.py
+
+      - name: Verify Telegram bot identity and destination
+        run: python scripts/telegram_diagnostic.py
+
+      - name: Run public job discovery
+        run: python main.py
