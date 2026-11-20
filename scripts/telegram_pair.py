@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
 """One-time, privacy-preserving pairing for @SoumyadipSAMCareerBot.
 
-The chat ID is sent back inside the private bot conversation and is never printed to
+While this script is running, the user sends the exact phrase PAIR SAM to the bot.
+The chat ID is returned inside that private bot conversation and is never printed to
 GitHub Actions logs.
 """
 import json
 import os
-import sys
+import time
 
 import requests
 
 EXPECTED_USERNAME = os.getenv("TELEGRAM_BOT_USERNAME", "SoumyadipSAMCareerBot").lstrip("@")
+PAIR_PHRASE = "PAIR SAM"
 
 
 def main():
@@ -27,23 +29,33 @@ def main():
         if not identity.get("ok") or username.lower() != EXPECTED_USERNAME.lower():
             raise RuntimeError(f"token is for @{username or 'unknown'}, not @{EXPECTED_USERNAME}")
 
-        updates_response = requests.get(
-            f"{base}/getUpdates",
-            params={"timeout": 0, "allowed_updates": json.dumps(["message"])},
-            timeout=20,
-        )
-        updates_response.raise_for_status()
-        updates = updates_response.json()
-        candidates = []
-        for update in updates.get("result", []):
-            message = update.get("message") or {}
-            chat = message.get("chat") or {}
-            if chat.get("type") == "private" and str(message.get("text", "")).startswith("/start"):
-                candidates.append((int(update["update_id"]), str(chat.get("id"))))
-        if not candidates:
-            raise RuntimeError("no private /start message found; open the bot and send /start, then rerun pairing")
+        print(f"✅ @{username} verified. Waiting up to 90 seconds for the private pairing phrase...")
+        deadline = time.monotonic() + 90
+        offset = None
+        paired = None
+        while time.monotonic() < deadline and paired is None:
+            params = {"timeout": 10, "allowed_updates": json.dumps(["message"])}
+            if offset is not None:
+                params["offset"] = offset
+            response = requests.get(f"{base}/getUpdates", params=params, timeout=20)
+            response.raise_for_status()
+            payload = response.json()
+            if not payload.get("ok"):
+                raise RuntimeError(payload.get("description", "Telegram getUpdates failed"))
+            for update in payload.get("result", []):
+                update_id = int(update["update_id"])
+                offset = update_id + 1
+                message = update.get("message") or {}
+                chat = message.get("chat") or {}
+                text = str(message.get("text", "")).strip().upper()
+                if chat.get("type") == "private" and text == PAIR_PHRASE:
+                    paired = (update_id, str(chat.get("id")))
+                    break
 
-        update_id, chat_id = candidates[-1]
+        if paired is None:
+            raise RuntimeError("pairing phrase not received; rerun pairing and send PAIR SAM to the bot while the job is active")
+
+        update_id, chat_id = paired
         send_response = requests.post(
             f"{base}/sendMessage",
             json={
@@ -62,7 +74,6 @@ def main():
         if not send_response.json().get("ok"):
             raise RuntimeError("Telegram could not send the private pairing message")
 
-        # Confirm only through the paired /start update. No chat ID is logged.
         ack = requests.get(f"{base}/getUpdates", params={"offset": update_id + 1, "timeout": 0}, timeout=15)
         ack.raise_for_status()
         print(f"✅ Pairing message sent privately by @{username}; no chat ID was written to logs")
