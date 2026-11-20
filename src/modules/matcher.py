@@ -15,6 +15,7 @@ class JobMatcher:
         self.target_roles = [r.lower() for r in self.config.get('target_roles', [])]
         self.exclusions = [e.lower() for e in self.config.get('exclusion_keywords', [])]
         self.thresholds = self.config.get('matching', {})
+        self.seniority_pattern = re.compile(r'\b(senior|sr\.?|lead|manager|director|vice president|vp|principal|head)\b', re.I)
         
         # Enhanced skill synonyms and variations
         self.skill_synonyms = {
@@ -95,34 +96,26 @@ class JobMatcher:
         text = f"{job_title} {job_description}".lower()
         
         for keyword in self.exclusions:
-            if keyword in text:
+            if re.search(rf'(?<!\w){re.escape(keyword)}(?!\w)', text):
                 return True, keyword
+        if self.seniority_pattern.search(job_title):
+            return True, 'senior/managerial title'
         return False, None
+
+    @staticmethod
+    def _contains_term(text, term):
+        """Match tokens/phrases, never one-character substrings inside normal words."""
+        return bool(re.search(rf'(?<!\w){re.escape(term.lower())}(?!\w)', text.lower()))
     
     def _extract_skills(self, text):
-        """Extract skills from text using enhanced matching."""
-        text_lower = text.lower()
+        """Extract only explicit, boundary-safe skills from title/JD text."""
         found_skills = set()
-        
-        # Check direct skills first
         for skill in self.my_skills:
-            if skill in text_lower:
+            if self._contains_term(text, skill):
                 found_skills.add(skill)
-        
-        # Check synonyms
         for main_skill, synonyms in self.skill_synonyms.items():
-            for synonym in synonyms:
-                if synonym in text_lower:
-                    found_skills.add(main_skill)
-                    break
-        
-        # Check for skill groups
-        for group_name, group_skills in self.skill_groups.items():
-            for skill in group_skills:
-                if skill in text_lower:
-                    found_skills.add(group_name)
-                    break
-        
+            if any(self._contains_term(text, synonym) for synonym in synonyms):
+                found_skills.add(main_skill)
         return found_skills
     
     def calculate_score(self, job_title, job_description=''):
@@ -148,65 +141,44 @@ class JobMatcher:
         # Partial matches with scoring
         if title_score == 0:
             title_keywords = {
-                # Exact matches get 100%
                 'junior data analyst': 100,
                 'jr. data analyst': 100,
                 'jr data analyst': 100,
                 'data analyst': 95,
-                'data analytics': 90,
-                
-                # MIS roles
+                'data analytics analyst': 90,
+                'analyst - data analytics': 90,
+                'analyst-data analytics': 90,
+                'reporting and analytics': 90,
+                'reporting & analytics': 90,
                 'mis analyst': 95,
                 'mis executive': 90,
-                'management information system': 90,
-                
-                # Business Analyst variations
-                'business analyst': 85,
-                'junior business analyst': 90,
-                'business analytics': 80,
-                
-                # Specialized roles
-                'financial data analyst': 90,
-                'risk analyst': 85,
-                'retail analytics': 85,
-                'ecommerce analytics': 85,
-                'telecom analytics': 85,
-                'customer churn analyst': 85,
-                'aviation data analyst': 90,
-                'automotive analytics': 90,
-                
-                # Developer roles
-                'tableau developer': 90,
-                'power bi developer': 90,
-                'bi developer': 90,
-                'etl developer': 85,
-                'data visualization specialist': 85,
-                
-                # Other roles
-                'operations analyst': 80,
-                'marketing analytics': 80,
-                'product analyst': 80,
-                'credit risk analyst': 80,
-                'customer insights': 80,
-                'supply chain analytics': 80,
-                'insights analyst': 80,
-                'analytics engineer': 85,
-                'database administrator': 75,
-                'data scientist': 75
+                'reporting analyst': 95,
+                'reporting executive': 85,
+                'business intelligence analyst': 95,
+                'bi analyst': 90,
+                'operations analyst': 85,
+                'operations analytics': 85,
+                'workforce analyst': 90,
+                'wfm analyst': 90,
+                'workforce management analyst': 90,
+                'insights analyst': 85,
+                'junior business analyst': 85
             }
             
             for keyword, score in title_keywords.items():
                 if keyword in job_title_lower:
                     title_score = max(title_score, score)
         
-        # Bonus for "Junior" or "Analyst" in title
-        if 'junior' in job_title_lower:
+        # Require an actual target-role title; title-only cards must not earn skills credit.
+        if title_score == 0:
+            return 0, [], 'skip', 'Title is outside the target analyst/BI/MIS/reporting roles'
+        if self._contains_term(job_title_lower, 'junior'):
             title_score = min(100, title_score + 10)
-        if 'analyst' in job_title_lower:
+        if self._contains_term(job_title_lower, 'analyst'):
             title_score = min(100, title_score + 5)
         
         # Step 3: Skills Match (50% weight)
-        found_skills = self._extract_skills(combined_text)
+        found_skills = self._extract_skills(job_desc_lower)  # Never infer skills from the job title alone.
         matched_skills = list(found_skills)
         
         # Enhanced skill scoring
@@ -229,14 +201,13 @@ class JobMatcher:
         elif skill_count >= 1:
             skill_score = 60
         else:
-            skill_score = 50  # Base score for matching title
+            skill_score = 0  # No JD evidence means no invented skill match.
         
-        # Bonus for skill groups
+        # Small diversity bonus only for explicitly observed skills.
         group_bonus = 0
-        for group_name, group_skills in self.skill_groups.items():
+        for group_skills in self.skill_groups.values():
             if any(skill in found_skills for skill in group_skills):
-                group_bonus += 5
-        
+                group_bonus += 3
         skill_score = min(100, skill_score + group_bonus)
         
         # Step 4: Calculate weighted total
@@ -260,13 +231,13 @@ class JobMatcher:
             total_score = min(100, total_score + 5)
         
         # Step 6: Determine recommendation
-        auto_threshold = self.thresholds.get('auto_apply_threshold', 70)
         review_threshold = self.thresholds.get('review_threshold', 60)
         
-        if total_score >= auto_threshold:
-            recommendation = 'auto_apply'
-        elif total_score >= review_threshold:
+        if total_score >= review_threshold:
             recommendation = 'review'
+        elif title_score >= 80:
+            # A relevant title without a fetched JD is discovery evidence, not a fit claim.
+            recommendation = 'discovered'
         else:
             recommendation = 'skip'
         

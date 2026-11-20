@@ -1,16 +1,5 @@
-"""
-Automation Modules Package
-"""
-from .sheets_manager import SheetsManager
-from .notifier import Notifier
-from .matcher import JobMatcher
-from .cover_letter_generator import CoverLetterGenerator
-from .job_scraper import JobScraper
+"""Sam Career discovery modules.
 
-__all__ = [
-    'SheetsManager',
-    'Notifier',
-    'JobMatcher',
-    'CoverLetterGenerator',
-    'JobScraper'
-]
+Imports are intentionally explicit at call sites so optional legacy modules do not
+load browser automation or notification dependencies as side effects.
+"""
